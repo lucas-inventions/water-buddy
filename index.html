@@ -212,31 +212,8 @@ const CelebCanvas = (function() {
     start();
   }
 
-  // ── 5. EMOJI EXPLOSION ──
-  function launchEmojis() {
-    ensure(); stop();
-    const burstCount = ri(3,5);
-    function doBurst(i) {
-      if (i >= burstCount) return;
-      const cx = canvas.width * r(0.25, 0.75);
-      const cy = canvas.height * r(0.2, 0.7);
-      for (let j = 0; j < 40; j++) {
-        const angle = r(0, Math.PI*2), speed = r(3,13);
-        const size = r(18,38);
-        particles.push({
-          x:cx, y:cy, vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed,
-          size, life:1, fade:r(0.009,0.015), gravity:0.10, drag:0.97, rot:r(0,Math.PI*2), rotV:r(-0.08,0.08),
-          update(){this.x+=this.vx;this.y+=this.vy;this.vy+=this.gravity;this.vx*=this.drag;this.vy*=this.drag;this.rot+=this.rotV;this.life-=this.fade;},
-          draw(c){c.save();c.globalAlpha=Math.max(0,this.life);c.translate(this.x,this.y);c.rotate(this.rot);c.font=this.size+'px serif';c.textAlign='center';c.textBaseline='middle';c.fillText('😊',0,0);c.restore();}
-        });
-      }
-      if (!animId) start();
-      setTimeout(() => doBurst(i+1), 380);
-    }
-    doBurst(0);
-  }
 
-  return { launchStars, launchFireworks, launchWaterDrops, launchLightning, launchEmojis, stop };
+  return { launchStars, launchFireworks, launchWaterDrops, launchLightning, stop };
 })();
 </script>
 <style>
@@ -962,8 +939,7 @@ function fireCelebration() {
     CelebCanvas.launchStars,
     CelebCanvas.launchFireworks,
     CelebCanvas.launchWaterDrops,
-    CelebCanvas.launchLightning,
-    CelebCanvas.launchEmojis
+    CelebCanvas.launchLightning
   ];
   effects[Math.floor(Math.random() * effects.length)]();
 }
