@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Water Buddy</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script>
+// ── CELEBRATION ENGINE — 5 effects ────────────────────
+const CelebCanvas = (function() {
+  let canvas, ctx, particles = [], animId = null;
+
+  function ensure() {
+    if (canvas) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; return; }
+    canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;';
+    document.body.appendChild(canvas);
+    ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    window.addEventListener('resize', () => { if(canvas){canvas.width=window.innerWidth;canvas.height=window.innerHeight;} });
+  }
+
+  function r(a,b){ return Math.random()*(b-a)+a; }
+  function ri(a,b){ return Math.floor(r(a,b)); }
+
+  function stop() {
+    if (animId) { cancelAnimationFrame(animId); animId = null; }
+    particles = [];
+    if (canvas) { ctx.clearRect(0,0,canvas.width,canvas.height); }
+  }
+
+  function loop() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    particles = particles.filter(p => p.life > 0);
+    particles.forEach(p => p.update());
+    particles.forEach(p => p.draw(ctx));
+    if (particles.length > 0) animId = requestAnimationFrame(loop);
+    else { animId = null; ctx.clearRect(0,0,canvas.width,canvas.height); }
+  }
+
+  function start() { if (!animId) animId = requestAnimationFrame(loop); }
+
+  // ── 1. STARS ──
+  function launchStars() {
+    ensure(); stop();
+    const colors = ['#fff7a1','#fffde0','#ffd700','#ffffff','#ffe066','#ffa500'];
+    const burstCount = ri(3,5);
+    function doBurst(i) {
+      if (i >= burstCount) return;
+      const cx = canvas.width * r(0.25, 0.75);
+      const cy = canvas.height * r(0.2, 0.7);
+      for (let j = 0; j < 60; j++) {
+        const angle = r(0, Math.PI*2), speed = r(3,14);
+        particles.push({
+          x:cx, y:cy, vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed,
+          size: r(4,14), color: colors[ri(0,colors.length)],
+          life:1, fade: r(0.009,0.015), gravity:0.12, drag:0.98, rot:r(0,Math.PI*2), rotV:r(-0.15,0.15),
+          update(){this.x+=this.vx;this.y+=this.vy;this.vy+=this.gravity;this.vx*=this.drag;this.vy*=this.drag;this.rot+=this.rotV;this.life-=this.fade;},
+          draw(c){
+            c.save();c.globalAlpha=Math.max(0,this.life);c.translate(this.x,this.y);c.rotate(this.rot);
+            c.fillStyle=this.color;
+            c.beginPath();
+            for(let k=0;k<5;k++){
+              const a=k*Math.PI*2/5-Math.PI/2;
+              const b=a+Math.PI/5;
+              k===0?c.moveTo(Math.cos(a)*this.size,Math.sin(a)*this.size):c.lineTo(Math.cos(a)*this.size,Math.sin(a)*this.size);
+              c.lineTo(Math.cos(b)*this.size*0.4,Math.sin(b)*this.size*0.4);
+            }
+            c.closePath();c.fill();c.restore();
+          }
+        });
+      }
+      if (!animId) start();
+      setTimeout(() => doBurst(i+1), 380);
+    }
+    doBurst(0);
+  }
+
+  // ── 2. FIREWORKS ──
+  function launchFireworks() {
+    ensure(); stop();
+    const W = canvas.width, H = canvas.height;
+    const fwColors = [['#ff4444','#ff8800','#ffff00'],['#00e5ff','#2196f3','#ffffff'],['#69f0ae','#00bcd4','#ffffff'],['#ce93d8','#f48fb1','#ffffff'],['#ffb74d','#ff7043','#fff176']];
+    let launched = 0;
+    function shootOne() {
+      if (launched >= 6) return;
+      launched++;
+      const tx = r(W*0.2, W*0.8), ty = r(H*0.1, H*0.45);
+      const sx = r(W*0.2, W*0.8), sy = H + 10;
+      const colors = fwColors[ri(0,fwColors.length)];
+      // rocket trail
+      const rocket = {
+        x:sx, y:sy, tx, ty,
+        vx:(tx-sx)/22, vy:(ty-sy)/22,
+        life:1, fade:0, color:'#ffffff', size:3,
+        exploded:false,
+        update(){
+          this.x+=this.vx; this.y+=this.vy;
+          // trail particles
+          if (Math.random()<0.6) particles.push(makeTrail(this.x,this.y));
+          if (Math.abs(this.y-this.ty)<10 && !this.exploded) {
+            this.exploded=true; this.life=0;
+            for(let i=0;i<55;i++) particles.push(makeShell(this.x,this.y,colors));
+          }
+        },
+        draw(c){c.save();c.globalAlpha=1;c.fillStyle=this.color;c.beginPath();c.arc(this.x,this.y,this.size,0,Math.PI*2);c.fill();c.restore();}
+      };
+      particles.push(rocket);
+      if (launched < 6) setTimeout(shootOne, r(180,340));
+    }
+    function makeTrail(x,y){
+      return {x,y,vx:r(-0.5,0.5),vy:r(0.3,1.2),life:0.7,fade:r(0.04,0.08),size:r(1,3),color:'#ffcc44',
+        update(){this.x+=this.vx;this.y+=this.vy;this.life-=this.fade;},
+        draw(c){c.save();c.globalAlpha=Math.max(0,this.life);c.fillStyle=this.color;c.beginPath();c.arc(this.x,this.y,this.size,0,Math.PI*2);c.fill();c.restore();}};
+    }
+    function makeShell(x,y,colors){
+      const angle=r(0,Math.PI*2),speed=r(2,10);
+      return {x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,
+        life:1,fade:r(0.010,0.018),color:colors[ri(0,colors.length)],size:r(2,5),gravity:0.12,drag:0.96,
+        update(){this.x+=this.vx;this.y+=this.vy;this.vy+=this.gravity;this.vx*=this.drag;this.vy*=this.drag;this.life-=this.fade;},
+        draw(c){c.save();c.globalAlpha=Math.max(0,this.life);c.fillStyle=this.color;c.beginPath();c.arc(this.x,this.y,this.size,0,Math.PI*2);c.fill();c.restore();}};
+    }
+    shootOne();
+    start();
+  }
+
+  // ── 3. WATER DROPS ──
+  function launchWaterDrops() {
+    ensure(); stop();
+    const W = canvas.width, H = canvas.height;
+    const blues = ['#00e5ff','#2196f3','#40c4ff','#64b5f6','#bbdefb','#ffffff'];
+    let spawned = 0;
+    function spawnWave() {
+      if (spawned > 120) return;
+      const count = ri(8,16);
+      for (let i = 0; i < count; i++) {
+        const x = r(0, W), delay = r(0, 200);
+        setTimeout(() => {
+          particles.push({
+            x, y: r(-30,-5), vx: r(-1,1), vy: r(4,10),
+            size: r(5,14), color: blues[ri(0,blues.length)],
+            life:1, fade:r(0.009,0.015), gravity:0.18, drag:0.995,
+            update(){this.x+=this.vx;this.y+=this.vy;this.vy+=this.gravity;this.vx*=this.drag;this.life-=this.fade;if(this.y>H)this.life=0;},
+            draw(c){
+              c.save();c.globalAlpha=Math.max(0,this.life);c.fillStyle=this.color;
+              c.beginPath();c.arc(this.x,this.y,this.size,0,Math.PI*2);c.fill();
+              // teardrop point
+              c.beginPath();c.moveTo(this.x-this.size*0.5,this.y);c.lineTo(this.x,this.y-this.size*1.6);c.lineTo(this.x+this.size*0.5,this.y);c.closePath();c.fill();
+              c.restore();
+            }
+          });
+          if (!animId) start();
+        }, delay);
+      }
+      spawned += count;
+      if (spawned < 120) setTimeout(spawnWave, ri(80,160));
+    }
+    spawnWave();
+    start();
+  }
+
+  // ── 4. LIGHTNING ──
+  function launchLightning() {
+    ensure(); stop();
+    const W = canvas.width, H = canvas.height;
+    let bolts = 0;
+    function flashBolt() {
+      if (bolts >= 10) return;
+      bolts++;
+      // build jagged path
+      const sx = r(W*0.1, W*0.9), sy = 0;
+      const points = [{x:sx,y:sy}];
+      let cx=sx, cy=sy;
+      while(cy < H*0.85) {
+        cx += r(-60,60); cy += r(30,70);
+        cx = Math.max(10, Math.min(W-10, cx));
+        points.push({x:cx,y:cy});
+      }
+      // branch
+      const branchStart = ri(1, points.length-1);
+      const branch = [points[branchStart]];
+      let bx=points[branchStart].x, by=points[branchStart].y;
+      for(let i=0;i<ri(2,4);i++){bx+=r(-50,50);by+=r(20,50);branch.push({x:bx,y:by});}
+
+      let alpha = 1;
+      const colors = ['#ffffff','#e0f7ff','#b3e5fc','#ffff99','#fffde7'];
+      const color = colors[ri(0,colors.length)];
+      const glow = ri(0,1) ? '#00e5ff' : '#ffffff';
+
+      particles.push({
+        life:1, fade:r(0.06,0.10), points, branch, color, glow, alpha,
+        update(){this.life-=this.fade;},
+        draw(c){
+          if(this.life<=0)return;
+          const a = Math.max(0,this.life);
+          // glow
+          c.save();c.globalAlpha=a*0.4;c.strokeStyle=this.glow;c.lineWidth=12;c.shadowColor=this.glow;c.shadowBlur=24;
+          c.beginPath();this.points.forEach((p,i)=>i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y));c.stroke();
+          // core
+          c.globalAlpha=a;c.strokeStyle=this.color;c.lineWidth=2.5;c.shadowBlur=8;
+          c.beginPath();this.points.forEach((p,i)=>i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y));c.stroke();
+          // branch
+          c.globalAlpha=a*0.7;c.lineWidth=1.5;
+          c.beginPath();this.branch.forEach((p,i)=>i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y));c.stroke();
+          c.restore();
+        }
+      });
+      if (!animId) start();
+      if (bolts < 10) setTimeout(flashBolt, r(120,280));
+    }
+    flashBolt();
+    start();
+  }
+
+  // ── 5. EMOJI EXPLOSION ──
+  function launchEmojis() {
+    ensure(); stop();
+    const burstCount = ri(3,5);
+    function doBurst(i) {
+      if (i >= burstCount) return;
+      const cx = canvas.width * r(0.25, 0.75);
+      const cy = canvas.height * r(0.2, 0.7);
+      for (let j = 0; j < 40; j++) {
+        const angle = r(0, Math.PI*2), speed = r(3,13);
+        const size = r(18,38);
+        particles.push({
+          x:cx, y:cy, vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed,
+          size, life:1, fade:r(0.009,0.015), gravity:0.10, drag:0.97, rot:r(0,Math.PI*2), rotV:r(-0.08,0.08),
+          update(){this.x+=this.vx;this.y+=this.vy;this.vy+=this.gravity;this.vx*=this.drag;this.vy*=this.drag;this.rot+=this.rotV;this.life-=this.fade;},
+          draw(c){c.save();c.globalAlpha=Math.max(0,this.life);c.translate(this.x,this.y);c.rotate(this.rot);c.font=this.size+'px serif';c.textAlign='center';c.textBaseline='middle';c.fillText('😊',0,0);c.restore();}
+        });
+      }
+      if (!animId) start();
+      setTimeout(() => doBurst(i+1), 380);
+    }
+    doBurst(0);
+  }
+
+  return { launchStars, launchFireworks, launchWaterDrops, launchLightning, launchEmojis, stop };
+})();
+</script>
+<style>
+:root {
+  --bg:#0a1628; --surface:#0f2040; --card:#142850;
+  --water-deep:#1a6faf; --water-mid:#2196f3; --water-light:#64b5f6;
+  --accent:#00e5ff; --accent2:#40c4ff;
+  --text:#e3f2fd; --text-dim:#78909c;
+  --border:rgba(100,181,246,0.18);
+  --success:#69f0ae; --warn:#ffb74d; --danger:#ff6b6b;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;
+  min-height:100vh;overflow-x:hidden;display:flex;flex-direction:column;align-items:center;}
+body::before{content:'';position:fixed;top:-40%;left:-20%;width:140%;height:80%;
+  background:radial-gradient(ellipse,rgba(33,150,243,0.12) 0%,transparent 70%);
+  pointer-events:none;z-index:0;}
+.app{width:100%;max-width:420px;position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;padding:0 16px 100px;min-height:100vh;}
+
+/* HEADER */
+.header{width:100%;display:flex;align-items:center;justify-content:space-between;padding:20px 4px 14px;}
+.header-title{font-size:28px;font-weight:800;letter-spacing:-0.5px;color:var(--accent);
+  text-shadow:0 0 20px rgba(0,229,255,0.4);}
+.header-date{font-family:'Space Mono',monospace;font-size:11px;color:var(--text-dim);
+  text-align:right;line-height:1.5;white-space:pre-line;}
+
+/* TAB BAR */
+.tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:420px;display:flex;
+  background:rgba(10,22,40,0.95);border-top:1px solid var(--border);
+  backdrop-filter:blur(12px);z-index:50;padding-bottom:env(safe-area-inset-bottom,0);}
+.tab-btn{flex:1;padding:14px 8px 10px;border:none;background:transparent;
+  color:var(--text-dim);font-family:'Syne',sans-serif;font-size:11px;font-weight:600;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;
+  transition:color 0.2s;text-transform:uppercase;letter-spacing:0.5px;}
+.tab-btn .tab-icon{font-size:20px;}
+.tab-btn.active{color:var(--accent);}
+.tab-btn.active .tab-icon{filter:drop-shadow(0 0 6px rgba(0,229,255,0.6));}
+
+/* SCREENS */
+.screen{width:100%;display:none;flex-direction:column;align-items:center;}
+.screen.active{display:flex;}
+
+/* ── BOTTLE + SLIDER ── */
+.main-display{width:100%;display:flex;align-items:center;justify-content:center;
+  gap:12px;margin-bottom:16px;position:relative;}
+.bottle-wrap{position:relative;display:flex;align-items:center;justify-content:center;flex:1;}
+.bottle-svg-wrap{position:relative;width:140px;height:260px;}
+#bottle-svg{width:100%;height:100%;filter:drop-shadow(0 8px 32px rgba(33,150,243,0.3));}
+.bottle-pct{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:'Space Mono',monospace;font-size:22px;font-weight:700;color:white;
+  text-shadow:0 1px 8px rgba(0,0,0,0.6);pointer-events:none;z-index:10;}
+.slider-col{display:flex;flex-direction:column;align-items:center;height:260px;gap:6px;}
+.slider-label{font-size:11px;font-weight:600;font-family:'DM Sans',sans-serif;color:var(--text-dim);
+  text-transform:uppercase;letter-spacing:0.8px;}
+.slider-track-wrap{flex:1;position:relative;width:32px;display:flex;align-items:center;justify-content:center;}
+.slider-track{width:6px;height:100%;background:var(--surface);border-radius:3px;
+  border:1px solid var(--border);position:relative;overflow:visible;}
+.slider-fill{position:absolute;bottom:0;left:0;width:100%;border-radius:3px;
+  background:linear-gradient(to top,var(--water-deep),var(--water-mid),var(--accent));
+  transition:height 0.4s cubic-bezier(0.34,1.56,0.64,1);}
+.slider-thumb{position:absolute;left:50%;transform:translate(-50%,50%);
+  width:24px;height:24px;border-radius:50%;background:white;border:3px solid var(--accent);
+  box-shadow:0 0 12px rgba(0,229,255,0.5);cursor:grab;
+  transition:bottom 0.4s cubic-bezier(0.34,1.56,0.64,1),box-shadow 0.15s;z-index:10;}
+.slider-thumb:active{cursor:grabbing;box-shadow:0 0 20px rgba(0,229,255,0.8);}
+.slider-thumb.dragging,.slider-fill.dragging{transition:none;}
+@keyframes bubbleRise{0%{transform:translateY(0) scale(1);opacity:0.6;}100%{transform:translateY(-60px) scale(0.3);opacity:0;}}
+.bubble{animation:bubbleRise 2s ease-in infinite;}
+.bubble:nth-child(2){animation-delay:0.7s;}
+.bubble:nth-child(3){animation-delay:1.4s;}
+
+/* MAIN SCREEN BOTTLE SELECTOR */
+.bottle-selector-main{width:100%;display:flex;gap:8px;margin-bottom:14px;
+  background:var(--surface);border-radius:14px;padding:5px;border:1px solid var(--border);}
+.bottle-btn-main{flex:1;padding:8px 4px;border:none;border-radius:10px;
+  background:transparent;color:var(--text-dim);font-family:'Syne',sans-serif;
+  font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;
+  display:flex;flex-direction:column;align-items:center;gap:2px;}
+.bottle-btn-main .b-oz{font-size:14px;color:inherit;}
+.bottle-btn-main .b-lbl{font-size:9px;font-weight:400;}
+.bottle-btn-main.active{background:linear-gradient(135deg,var(--water-mid),var(--accent2));
+  color:white;box-shadow:0 4px 14px rgba(33,150,243,0.35);}
+
+/* STAT CARDS */
+.stats-row{width:100%;display:flex;gap:10px;margin-bottom:14px;}
+.stat-card{flex:1;background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:14px 16px;position:relative;overflow:hidden;}
+.stat-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;}
+.stat-card.today::before{background:linear-gradient(to bottom,var(--accent),var(--water-mid));}
+.stat-card.lifetime::before{background:linear-gradient(to bottom,var(--success),#00796b);}
+.stat-label{font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:0.8px;font-family:'DM Sans',sans-serif;margin-bottom:4px;}
+.stat-value{font-size:28px;font-weight:800;line-height:1;}
+.stat-card.today .stat-value{color:var(--accent);text-shadow:0 0 16px rgba(0,229,255,0.3);}
+.stat-card.lifetime .stat-value{color:var(--success);text-shadow:0 0 16px rgba(105,240,174,0.3);}
+.stat-unit{font-size:13px;font-weight:400;color:var(--text-dim);}
+
+/* GOAL BAR */
+.goal-bar-wrap{width:100%;margin-bottom:14px;display:flex;flex-direction:column;gap:6px;}
+.goal-bar-row{display:flex;justify-content:space-between;align-items:center;}
+.goal-bar-title{font-size:13px;font-weight:600;color:var(--text-dim);font-family:'DM Sans',sans-serif;letter-spacing:0.3px;}
+.goal-bar-track{width:100%;height:8px;background:var(--surface);
+  border-radius:4px;overflow:hidden;border:1px solid var(--border);}
+.goal-bar-fill{height:100%;border-radius:4px;
+  background:linear-gradient(90deg,var(--water-mid),var(--accent));
+  transition:width 0.5s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 0 8px rgba(0,229,255,0.4);}
+
+/* WEEKLY HEALTH CARD */
+.weekly-card{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:18px;padding:16px 18px;margin-bottom:14px;position:relative;overflow:hidden;}
+.weekly-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  border-radius:3px 0 0 3px;background:linear-gradient(to bottom,var(--warn),#e65100);}
+.weekly-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.weekly-title{font-size:10px;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:1px;font-family:'Space Mono',monospace;}
+.weekly-trend{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;font-family:'Space Mono',monospace;}
+.trend-up{color:var(--success);}
+.trend-down{color:var(--danger);}
+.trend-same{color:var(--text-dim);}
+.weekly-bars{display:flex;gap:6px;align-items:flex-end;height:50px;}
+.week-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.week-bar-track{width:100%;height:44px;background:var(--card);border-radius:6px;
+  position:relative;overflow:hidden;border:1px solid var(--border);}
+.week-bar-fill{position:absolute;bottom:0;left:0;right:0;border-radius:6px;
+  transition:height 0.6s cubic-bezier(0.34,1.56,0.64,1);}
+.week-bar-fill.this{background:linear-gradient(to top,var(--water-mid),var(--accent));}
+.week-bar-fill.last{background:linear-gradient(to top,rgba(100,181,246,0.3),rgba(100,181,246,0.5));}
+.week-bar-label{font-size:9px;color:var(--text-dim);font-family:'Space Mono',monospace;}
+.week-bar-oz{font-size:9px;color:var(--text-dim);font-family:'Space Mono',monospace;white-space:nowrap;}
+
+/* BUTTONS */
+.btn-row{width:100%;display:flex;gap:12px;margin-bottom:12px;}
+.btn{flex:1;padding:16px 12px;border:none;border-radius:16px;
+  font-family:'Syne',sans-serif;font-size:16px;font-weight:700;cursor:pointer;
+  transition:all 0.18s ease;display:flex;flex-direction:column;align-items:center;gap:4px;
+  position:relative;overflow:hidden;}
+.btn:active{transform:scale(0.96);}
+.btn-icon{font-size:22px;}
+.btn-sip{background:linear-gradient(135deg,#1565c0,var(--water-mid));color:white;
+  box-shadow:0 4px 20px rgba(33,150,243,0.3);border:1px solid rgba(100,181,246,0.3);}
+.btn-refill{background:linear-gradient(135deg,#004d40,#00bcd4);color:white;
+  box-shadow:0 4px 20px rgba(0,188,212,0.3);border:1px solid rgba(0,229,255,0.2);}
+@keyframes ripple{0%{transform:translate(-50%,-50%) scale(0);opacity:0.5;}100%{transform:translate(-50%,-50%) scale(4);opacity:0;}}
+.ripple-el{position:absolute;width:60px;height:60px;border-radius:50%;
+  background:rgba(255,255,255,0.25);pointer-events:none;animation:ripple 0.5s ease-out forwards;}
+@keyframes floatUp{0%{opacity:1;transform:translateY(0) translateX(-50%);}100%{opacity:0;transform:translateY(-50px) translateX(-50%);}}
+.sip-flash{position:absolute;top:8px;left:50%;font-family:'Space Mono',monospace;font-size:14px;
+  color:var(--accent);font-weight:700;pointer-events:none;animation:floatUp 1.2s ease-out forwards;white-space:nowrap;}
+
+/* ── SETUP SCREEN ── */
+.setup-section{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:20px;padding:20px;margin-bottom:14px;}
+.setup-section-title{font-size:15px;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:1px;font-family:'DM Sans',sans-serif;
+  margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.bottle-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+.bottle-btn{padding:10px 4px;border:1px solid var(--border);border-radius:12px;
+  background:transparent;color:var(--text-dim);font-family:'Syne',sans-serif;
+  font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;
+  display:flex;flex-direction:column;align-items:center;gap:2px;}
+.bottle-btn .b-oz{font-size:15px;color:inherit;}
+.bottle-btn .b-lbl{font-size:9px;font-weight:400;}
+.bottle-btn.active{background:linear-gradient(135deg,var(--water-mid),var(--accent2));
+  color:white;border-color:transparent;box-shadow:0 4px 14px rgba(33,150,243,0.35);}
+.weight-row{display:flex;align-items:center;gap:12px;}
+.weight-input-wrap{position:relative;flex:1;}
+.weight-input{width:100%;padding:14px 44px 14px 16px;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;color:var(--text);
+  font-family:'Space Mono',monospace;font-size:20px;font-weight:700;
+  outline:none;-webkit-appearance:none;transition:border-color 0.2s;}
+.weight-input:focus{border-color:var(--accent);}
+.weight-input::placeholder{color:var(--text-dim);font-size:14px;font-family:'Syne',sans-serif;}
+.weight-unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  font-size:12px;color:var(--text-dim);font-family:'Space Mono',monospace;}
+.goal-preview{background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:10px 14px;text-align:center;min-width:80px;}
+.goal-preview-val{font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--success);}
+.goal-preview-lbl{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;}
+.addon-list{display:flex;flex-direction:column;gap:10px;}
+.addon-row{display:flex;align-items:center;justify-content:space-between;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 16px;cursor:pointer;transition:border-color 0.2s;}
+.addon-row.on{border-color:rgba(0,229,255,0.4);}
+.addon-left{display:flex;align-items:center;gap:12px;}
+.addon-emoji{font-size:22px;}
+.addon-name{font-size:14px;font-weight:700;}
+.addon-desc{font-size:11px;color:var(--text-dim);margin-top:2px;}
+.toggle{width:44px;height:26px;border-radius:13px;background:var(--surface);
+  border:1px solid var(--border);position:relative;transition:background 0.25s;flex-shrink:0;}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;
+  border-radius:50%;background:var(--text-dim);transition:transform 0.25s,background 0.25s;}
+.addon-row.on .toggle{background:linear-gradient(135deg,var(--water-mid),var(--accent));border-color:transparent;}
+.addon-row.on .toggle::after{transform:translateX(18px);background:white;}
+
+/* GOAL SUMMARY */
+.goal-summary-box{width:100%;background:var(--surface);border:1px solid rgba(0,229,255,0.25);
+  border-radius:20px;padding:20px;margin-bottom:14px;
+  display:flex;flex-direction:column;align-items:center;gap:4px;}
+.goal-summary-title{font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:1px;font-family:'DM Sans',sans-serif;}
+.goal-summary-val{font-size:52px;font-weight:800;color:var(--accent);line-height:1;
+  text-shadow:0 0 24px rgba(0,229,255,0.4);}
+.goal-summary-unit{font-size:14px;color:var(--text-dim);}
+.goal-summary-breakdown{font-size:13px;font-weight:500;color:var(--text-dim);font-family:'DM Sans',sans-serif;
+  margin-top:6px;text-align:center;line-height:1.6;white-space:pre-line;}
+
+/* REWARD OVERLAY — gold theme */
+.celebration.reward {
+  background: radial-gradient(ellipse at 50% 30%, #3d2800 0%, #1a0f00 100%);
+}
+.celebration.reward .celeb-affirmation {
+  color: #ffe066;
+  text-shadow: 0 0 60px rgba(255,200,0,0.7), 0 0 20px rgba(255,180,0,0.4), 0 2px 16px rgba(0,0,0,0.8);
+  font-size: clamp(26px, 7.5vw, 38px);
+}
+.celebration.reward .celeb-sub {
+  color: rgba(255,200,80,0.75);
+}
+.celebration.reward .celeb-nice-btn {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+  box-shadow: 0 8px 32px rgba(245,158,11,0.5);
+  color: #1a0f00;
+}
+
+/* CELEBRATION */
+.celebration{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:48px 36px 100px;
+  background:radial-gradient(ellipse at 50% 30%,#0a2a5c 0%,#03080f 100%);
+  opacity:0;pointer-events:none;transition:opacity 0.6s ease;}
+.celebration.visible{opacity:1;pointer-events:all;}
+.celeb-emoji{font-size:56px;margin-bottom:28px;
+  animation:celebBounce 1.2s ease infinite alternate;position:relative;z-index:2;
+  filter:drop-shadow(0 0 20px rgba(0,229,255,0.6));}
+@keyframes celebBounce{from{transform:translateY(0) scale(1);}to{transform:translateY(-12px) scale(1.1);}}
+.celeb-affirmation{font-family:'Syne',sans-serif;font-size:clamp(22px,6.5vw,32px);
+  font-weight:800;line-height:1.4;text-align:center;color:#fff;
+  text-shadow:0 0 60px rgba(0,229,255,0.6),0 0 20px rgba(0,229,255,0.3),0 2px 16px rgba(0,0,0,0.8);
+  position:relative;z-index:2;max-width:340px;
+  animation:affirmIn 0.8s cubic-bezier(0.34,1.56,0.64,1) 0.1s forwards;opacity:0;}
+@keyframes affirmIn{from{opacity:0;transform:translateY(24px) scale(0.95);}to{opacity:1;transform:translateY(0) scale(1);}}
+.celeb-sub{margin-top:20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;
+  color:rgba(0,229,255,0.65);letter-spacing:2px;text-transform:uppercase;
+  position:relative;z-index:2;animation:affirmIn 0.8s ease 0.5s forwards;opacity:0;}
+.celeb-btns{margin-top:40px;display:flex;justify-content:center;position:relative;z-index:3;
+  animation:affirmIn 0.8s ease 0.8s forwards;opacity:0;}
+.celeb-nice-btn{padding:20px 64px;border:none;border-radius:50px;
+  background:linear-gradient(135deg,var(--water-mid),var(--accent));color:#fff;
+  font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;cursor:pointer;
+  box-shadow:0 8px 32px rgba(0,229,255,0.4);transition:all 0.15s;white-space:nowrap;}
+.celeb-nice-btn:active{transform:scale(0.96);box-shadow:0 3px 14px rgba(0,229,255,0.2);}
+
+/* TOAST */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  padding:12px 24px;border-radius:50px;font-family:'Space Mono',monospace;font-size:13px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);
+  transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1),opacity 0.35s;
+  z-index:100;opacity:0;white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="header-title">💧 Water Buddy</div>
+  </div>
+
+  <!-- MAIN SCREEN -->
+  <div class="screen active" id="screen-main">
+
+    <!-- Bottle size selector on main -->
+    <div class="bottle-selector-main">
+      <button class="bottle-btn-main" data-oz="12" onclick="selectBottle(this)"><span class="b-oz">12</span><span class="b-lbl">oz</span></button>
+      <button class="bottle-btn-main active" data-oz="16" onclick="selectBottle(this)"><span class="b-oz">16</span><span class="b-lbl">oz</span></button>
+      <button class="bottle-btn-main" data-oz="20" onclick="selectBottle(this)"><span class="b-oz">20</span><span class="b-lbl">oz</span></button>
+      <button class="bottle-btn-main" data-oz="24" onclick="selectBottle(this)"><span class="b-oz">24</span><span class="b-lbl">oz</span></button>
+      <button class="bottle-btn-main" data-oz="32" onclick="selectBottle(this)"><span class="b-oz">32</span><span class="b-lbl">oz</span></button>
+    </div>
+
+    <div class="main-display">
+      <div class="bottle-wrap">
+        <div class="bottle-svg-wrap">
+          <svg id="bottle-svg" viewBox="0 0 100 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <clipPath id="bottleClip">
+                <path d="M30,30 L20,50 L15,80 L15,175 Q15,185 25,185 L75,185 Q85,185 85,175 L85,80 L80,50 L70,30 Z"/>
+              </clipPath>
+              <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#64b5f6;stop-opacity:0.9"/>
+                <stop offset="60%" style="stop-color:#2196f3;stop-opacity:0.95"/>
+                <stop offset="100%" style="stop-color:#1565c0;stop-opacity:1"/>
+              </linearGradient>
+              <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:rgba(255,255,255,0.15)"/>
+                <stop offset="40%" style="stop-color:rgba(255,255,255,0.04)"/>
+                <stop offset="100%" style="stop-color:rgba(255,255,255,0.08)"/>
+              </linearGradient>
+              <linearGradient id="capGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#546e7a"/>
+                <stop offset="100%" style="stop-color:#263238"/>
+              </linearGradient>
+            </defs>
+            <path d="M30,30 L20,50 L15,80 L15,175 Q15,185 25,185 L75,185 Q85,185 85,175 L85,80 L80,50 L70,30 Z"
+                  fill="rgba(20,40,80,0.6)" stroke="rgba(100,181,246,0.4)" stroke-width="1.5"/>
+            <g clip-path="url(#bottleClip)">
+              <rect id="waterRect" x="0" y="100" width="100" height="200" fill="url(#waterGrad)"
+                    style="transition:y 0.5s cubic-bezier(0.34,1.56,0.64,1)"/>
+              <g id="waveGroup" style="transition:transform 0.5s cubic-bezier(0.34,1.56,0.64,1)">
+                <path fill="rgba(100,181,246,0.5)"
+                  d="M-100,0 Q-75,-8 -50,0 Q-25,8 0,0 Q25,-8 50,0 Q75,8 100,0 Q125,-8 150,0 Q175,8 200,0 L200,20 L-100,20 Z">
+                  <animateTransform attributeName="transform" type="translate" from="0,0" to="100,0" dur="2.5s" repeatCount="indefinite"/>
+                </path>
+                <path fill="rgba(33,150,243,0.4)"
+                  d="M-100,4 Q-75,12 -50,4 Q-25,-4 0,4 Q25,12 50,4 Q75,-4 100,4 Q125,12 150,4 Q175,-4 200,4 L200,20 L-100,20 Z">
+                  <animateTransform attributeName="transform" type="translate" from="100,0" to="0,0" dur="2s" repeatCount="indefinite"/>
+                </path>
+              </g>
+              <circle class="bubble" cx="35" cy="150" r="2.5" fill="rgba(255,255,255,0.4)"/>
+              <circle class="bubble" cx="60" cy="160" r="1.8" fill="rgba(255,255,255,0.35)"/>
+              <circle class="bubble" cx="48" cy="140" r="3" fill="rgba(255,255,255,0.3)"/>
+            </g>
+            <path d="M22,55 L18,85 L18,160 Q18,180 26,182 L30,182 L30,170 Q24,168 24,155 L24,85 L27,55 Z"
+                  fill="url(#glassGrad)" opacity="0.7"/>
+            <line x1="15" y1="80"  x2="20" y2="80"  stroke="rgba(100,181,246,0.3)" stroke-width="1"/>
+            <line x1="15" y1="105" x2="20" y2="105" stroke="rgba(100,181,246,0.3)" stroke-width="1"/>
+            <line x1="15" y1="130" x2="20" y2="130" stroke="rgba(100,181,246,0.3)" stroke-width="1"/>
+            <line x1="15" y1="155" x2="20" y2="155" stroke="rgba(100,181,246,0.3)" stroke-width="1"/>
+            <rect x="36" y="14" width="28" height="8" rx="3" fill="url(#capGrad)"/>
+            <rect x="40" y="6"  width="20" height="10" rx="4" fill="url(#capGrad)"/>
+            <rect x="44" y="2"  width="12" height="6"  rx="3" fill="#455a64"/>
+            <path d="M30,30 Q50,24 70,30" fill="none" stroke="rgba(100,181,246,0.3)" stroke-width="1"/>
+          </svg>
+        </div>
+      </div>
+      <div class="slider-col">
+        <div class="slider-label">level</div>
+        <div class="slider-track-wrap">
+          <div class="slider-track" id="sliderTrack">
+            <div class="slider-fill" id="sliderFill" style="height:100%"></div>
+            <div class="slider-thumb" id="sliderThumb" style="bottom:100%"></div>
+          </div>
+        </div>
+        <div class="slider-label" id="slider-oz-label">16oz</div>
+      </div>
+    </div>
+
+    <!-- Stats row -->
+    <div class="stats-row">
+      <div class="stat-card today">
+        <div class="stat-label">today</div>
+        <div class="stat-value"><span id="total-oz">0</span><span class="stat-unit"> oz</span></div>
+      </div>
+      <div class="stat-card lifetime">
+        <div class="stat-label">lifetime</div>
+        <div class="stat-value"><span id="lifetime-oz">0</span><span class="stat-unit"> oz</span></div>
+      </div>
+    </div>
+
+    <!-- Goal bar -->
+    <div class="goal-bar-wrap">
+      <div class="goal-bar-row">
+        <div class="goal-bar-title">daily goal</div>
+        <div class="goal-bar-title" id="goal-bar-label">0 / 64 oz</div>
+      </div>
+      <div class="goal-bar-track">
+        <div class="goal-bar-fill" id="goalBar" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="btn-row">
+      <button class="btn btn-sip" id="sipBtn" onclick="doSip(event)">
+        <span class="btn-icon">💧</span><span>Sip</span>
+      </button>
+      <button class="btn btn-refill" onclick="doRefill(event)">
+        <span class="btn-icon">🚿</span><span>Refill</span>
+      </button>
+    </div>
+
+  </div><!-- /screen-main -->
+
+  <!-- SETUP SCREEN -->
+  <div class="screen" id="screen-setup">
+
+    <div class="goal-summary-box">
+      <div class="goal-summary-title">your daily goal</div>
+      <div><span class="goal-summary-val" id="setup-goal-val">64</span><span class="goal-summary-unit"> oz</span></div>
+      <div class="goal-summary-breakdown" id="setup-goal-breakdown">Enter your weight to personalize</div>
+    </div>
+
+    <!-- Body weight -->
+    <div class="setup-section">
+      <div class="setup-section-title">⚖️ Body Weight</div>
+      <div class="weight-row">
+        <div class="weight-input-wrap">
+          <input class="weight-input" type="number" id="weight-input"
+                 placeholder="e.g. 175" min="50" max="400"
+                 oninput="onWeightChange()" inputmode="numeric"/>
+          <span class="weight-unit">lbs</span>
+        </div>
+        <div class="goal-preview">
+          <div class="goal-preview-val" id="weight-goal-preview">—</div>
+          <div class="goal-preview-lbl">base oz</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add-ons -->
+    <div class="setup-section">
+      <div class="setup-section-title">➕ Add-ons <span style="font-size:10px;color:var(--text-dim);font-weight:400;letter-spacing:0;">+15% each</span></div>
+      <div class="addon-list">
+        <div class="addon-row" id="addon-climate" onclick="toggleAddon('climate')">
+          <div class="addon-left">
+            <div class="addon-emoji">🌵</div>
+            <div><div class="addon-name">Dry / Arid Climate</div><div class="addon-desc">Hot, low-humidity environment</div></div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+        <div class="addon-row" id="addon-activity" onclick="toggleAddon('activity')">
+          <div class="addon-left">
+            <div class="addon-emoji">🏃</div>
+            <div><div class="addon-name">High Activity / Exercise</div><div class="addon-desc">Intense workout or physical labor</div></div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /screen-setup -->
+
+</div><!-- /app -->
+
+<!-- CELEBRATION OVERLAY -->
+<div class="celebration" id="celebration">
+  <div class="celeb-emoji" id="celeb-emoji">💧</div>
+  <div class="celeb-affirmation" id="celeb-text"></div>
+  <div class="celeb-sub" id="celeb-sub">keep going</div>
+  <div class="celeb-btns">
+    <button class="celeb-nice-btn" onclick="closeCelebration()">Nice! 👊</button>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn" id="tab-setup" onclick="switchTab('setup')">
+    <span class="tab-icon">⚙️</span><span>Setup</span>
+  </button>
+  <button class="tab-btn active" id="tab-main" onclick="switchTab('main')">
+    <span class="tab-icon">💧</span><span>Track</span>
+  </button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ────────────────────────────────────────────
+let bottleSizeOz   = 16;
+let currentLevelOz = 16;
+let totalOzToday   = 0;
+let lifetimeOz     = 0;
+let goalOz         = 64;
+let bodyWeightLbs  = 0;
+let addonClimate   = false;
+let addonActivity  = false;
+
+// Milestone flags — reset on refill
+let milestones = { 75: false, 50: false, 25: false, 0: false };
+
+const SK = {
+  today:'hydrate_today', date:'hydrate_date', lifetime:'hydrate_lifetime',
+  settings:'hydrate_settings', affirmIdx:'hydrate_affirm_idx'
+};
+
+// ── AFFIRMATIONS + SURPRISE REWARDS ──────────────────
+// Rewards are marked with a leading ★ so the overlay can detect them
+const AFFIRMATIONS = [
+  "You've got this!",
+  "Keep going, you're closer than you think!",
+  "★🎮 You've earned 50 Robux!",
+  "Every small step counts.",
+  "Progress is progress, no matter how small.",
+  "Hard things get easier with practice.",
+  "Be proud of how far you've come.",
+  "★📱 You've earned 30 minutes of screen time!",
+  "You're building something great, one day at a time.",
+  "Good habits are superpowers.",
+  "Small wins add up to big things.",
+  "Be the kid you're proud to be.",
+  "★🍪 You've earned a chocolate chip cookie!",
+  "Doing hard things makes you stronger.",
+  "Today's effort is tomorrow's confidence.",
+  "You are capable of great things.",
+  "You get stronger with every challenge.",
+  "★🎬 Tonight is a movie night!",
+  "Great things take time.",
+  "Small steps lead to big adventures.",
+  "Kindness and effort go a long way.",
+  "The world needs what only you can offer.",
+  "Curiosity is a superpower.",
+  "Brave hearts do hard things.",
+  "★🍕 You get pizza for dinner!",
+  "Good things grow from good habits.",
+  "The secret is to never stop trying.",
+  "Do good, be good, feel good.",
+  "Leave things better than you found them.",
+  "Be someone you'd look up to."
+];
+
+// ── INIT ─────────────────────────────────────────────
+function init() {
+  loadFromStorage();
+  checkDayRollover();
+  renderAll();
+  renderSetup();
+  setupSlider();
+}
+
+// ── DAY ROLLOVER ─────────────────────────────────────
+function checkDayRollover() {
+  const today = new Date().toDateString();
+  const stored = localStorage.getItem(SK.date);
+  if (stored !== today) {
+    totalOzToday = 0;
+    localStorage.setItem(SK.date, today);
+    localStorage.setItem(SK.today, '0');
+  }
+}
+
+// ── STORAGE ──────────────────────────────────────────
+function loadFromStorage() {
+  lifetimeOz   = parseFloat(localStorage.getItem(SK.lifetime) || '0');
+  totalOzToday = parseFloat(localStorage.getItem(SK.today) || '0');
+
+  const s = JSON.parse(localStorage.getItem(SK.settings) || '{}');
+  if (s.bottleSizeOz)  bottleSizeOz  = s.bottleSizeOz;
+  if (s.bodyWeightLbs) bodyWeightLbs = s.bodyWeightLbs;
+  if (s.addonClimate  !== undefined) addonClimate  = s.addonClimate;
+  if (s.addonActivity !== undefined) addonActivity = s.addonActivity;
+
+  currentLevelOz = bottleSizeOz;
+  recalcGoal();
+
+  setTimeout(() => {
+    if (bodyWeightLbs) {
+      const inp = document.getElementById('weight-input');
+      if (inp) inp.value = bodyWeightLbs;
+    }
+    document.querySelectorAll('.bottle-btn-main, .bottle-btn').forEach(b =>
+      b.classList.toggle('active', parseInt(b.dataset.oz) === bottleSizeOz));
+    document.getElementById('addon-climate').classList.toggle('on', addonClimate);
+    document.getElementById('addon-activity').classList.toggle('on', addonActivity);
+  }, 0);
+}
+
+function saveSettings() {
+  localStorage.setItem(SK.settings, JSON.stringify(
+    {bottleSizeOz, bodyWeightLbs, addonClimate, addonActivity}));
+}
+
+function saveTotals() {
+  localStorage.setItem(SK.today, totalOzToday.toString());
+  localStorage.setItem(SK.lifetime, lifetimeOz.toString());
+}
+
+// ── GOAL CALC ────────────────────────────────────────
+function recalcGoal() {
+  let base = bodyWeightLbs > 0 ? bodyWeightLbs / 2 : 64;
+  let mult = 1 + (addonClimate ? 0.15 : 0) + (addonActivity ? 0.15 : 0);
+  goalOz = Math.round(base * mult);
+}
+
+// ── RENDER ───────────────────────────────────────────
+function renderAll() {
+  const pct = Math.max(0, Math.min(1, currentLevelOz / bottleSizeOz));
+  const waterY = 185 - pct * (185 - 30);
+  document.getElementById('waterRect').setAttribute('y', waterY);
+  document.getElementById('waveGroup').setAttribute('transform', `translate(0,${waterY})`);
+  document.getElementById('sliderFill').style.height  = (pct * 100) + '%';
+  document.getElementById('sliderThumb').style.bottom = (pct * 100) + '%';
+  document.getElementById('slider-oz-label').textContent = Math.round(currentLevelOz) + ' oz';
+  document.getElementById('total-oz').textContent = Math.round(totalOzToday);
+  document.getElementById('lifetime-oz').textContent =
+    lifetimeOz >= 1000
+      ? (lifetimeOz / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+      : Math.round(lifetimeOz);
+  const gp = Math.min(1, totalOzToday / goalOz);
+  document.getElementById('goalBar').style.width = (gp * 100) + '%';
+  document.getElementById('goal-bar-label').textContent =
+    Math.round(totalOzToday) + ' / ' + goalOz + ' oz';
+}
+
+function renderSetup() {
+  recalcGoal();
+  document.getElementById('setup-goal-val').textContent = goalOz;
+  const base = bodyWeightLbs > 0 ? Math.round(bodyWeightLbs / 2) : null;
+  let lines = [];
+  if (base) lines.push('Base: ' + base + ' oz  (weight ÷ 2)');
+  if (addonClimate)  lines.push('🌵 +15% dry climate');
+  if (addonActivity) lines.push('🏃 +15% high activity');
+  if (!base && !addonClimate && !addonActivity) lines.push('Enter your weight to personalize');
+  document.getElementById('setup-goal-breakdown').textContent = lines.join('\n');
+  document.getElementById('weight-goal-preview').textContent = base ? base + ' oz' : '—';
+}
+
+// ── TABS ─────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + tab).classList.add('active');
+  document.getElementById('tab-'    + tab).classList.add('active');
+}
+
+// ── BOTTLE SIZE ──────────────────────────────────────
+function selectBottle(el) {
+  const newSize = parseInt(el.dataset.oz);
+  const pct = currentLevelOz / bottleSizeOz;
+  bottleSizeOz   = newSize;
+  currentLevelOz = pct * bottleSizeOz;
+  document.querySelectorAll('.bottle-btn-main, .bottle-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.oz) === bottleSizeOz));
+  saveSettings(); renderAll();
+  showToast('Bottle: ' + newSize + ' oz');
+}
+
+// ── WEIGHT ───────────────────────────────────────────
+function onWeightChange() {
+  const val = parseFloat(document.getElementById('weight-input').value);
+  bodyWeightLbs = isNaN(val) || val < 1 ? 0 : val;
+  saveSettings(); renderSetup(); renderAll();
+}
+
+// ── ADD-ONS ──────────────────────────────────────────
+function toggleAddon(id) {
+  if (id === 'climate')  { addonClimate  = !addonClimate;  document.getElementById('addon-climate').classList.toggle('on', addonClimate); }
+  if (id === 'activity') { addonActivity = !addonActivity; document.getElementById('addon-activity').classList.toggle('on', addonActivity); }
+  saveSettings(); renderSetup(); renderAll();
+  showToast(id === 'climate'
+    ? (addonClimate  ? '🌵 Dry climate +15%' : 'Dry climate removed')
+    : (addonActivity ? '🏃 High activity +15%' : 'High activity removed'));
+}
+
+// ── SIP ──────────────────────────────────────────────
+function doSip(event) {
+  if (currentLevelOz <= 0) { showToast('Bottle empty — refill! 🚿'); return; }
+  const sipOz = +(Math.random() * 2 + 2).toFixed(1);
+  const actual = Math.min(sipOz, currentLevelOz);
+  currentLevelOz  = Math.max(0, currentLevelOz - actual);
+  totalOzToday   += actual;
+  lifetimeOz     += actual;
+  saveTotals(); renderAll();
+  showToast('−' + Math.round(actual) + ' oz 💧');
+  addRipple(event.currentTarget);
+  showSipFlash('−' + Math.round(actual) + ' oz', event.currentTarget);
+  if (totalOzToday >= goalOz) {
+    setTimeout(() => showToast('🎉 Daily goal crushed! ' + goalOz + ' oz!'), 2400);
+  }
+  checkMilestones();
+}
+
+// ── REFILL ───────────────────────────────────────────
+function doRefill(event) {
+  currentLevelOz = bottleSizeOz;
+  milestones = { 75: false, 50: false, 25: false, 0: false };
+  renderAll();
+  showToast('Refilled! 🚿');
+  addRipple(event.currentTarget);
+}
+
+// ── MILESTONE CHECK ───────────────────────────────────
+function checkMilestones() {
+  const pct = (currentLevelOz / bottleSizeOz) * 100;
+  const checks = [
+    { threshold: 75, emoji: '💪', sub: 'great start!' },
+    { threshold: 50, emoji: '⚡', sub: 'halfway there!' },
+    { threshold: 25, emoji: '🔥', sub: 'almost done!' },
+    { threshold: 0,  emoji: '🏆', sub: 'bottle finished!' },
+  ];
+  for (const { threshold, emoji, sub } of checks) {
+    if (!milestones[threshold] && pct <= threshold) {
+      milestones[threshold] = true;
+      setTimeout(() => showCelebration(emoji, sub), 350);
+      break;
+    }
+  }
+}
+
+function showCelebration(emoji, sub) {
+  let idx = parseInt(localStorage.getItem(SK.affirmIdx) || '0');
+  if (isNaN(idx) || idx >= AFFIRMATIONS.length) idx = 0;
+  localStorage.setItem(SK.affirmIdx, ((idx + 1) % AFFIRMATIONS.length).toString());
+
+  const raw = AFFIRMATIONS[idx];
+  const isReward = raw.startsWith('★');
+  const text = isReward ? raw.slice(1).trim() : raw; // strip marker for display
+
+  document.getElementById('celeb-emoji').textContent = isReward ? '🎉' : emoji;
+  document.getElementById('celeb-text').textContent  = text;
+  document.getElementById('celeb-sub').textContent   = isReward ? '🌟 surprise reward! 🌟' : sub;
+
+  // Gold theme for rewards, normal theme otherwise
+  const cel = document.getElementById('celebration');
+  cel.classList.toggle('reward', isReward);
+
+  // Re-trigger animation
+  const el = document.getElementById('celeb-text');
+  el.style.animation = 'none'; el.offsetHeight; el.style.animation = '';
+
+  cel.classList.add('visible');
+
+  // Auto-fire random celebration effect
+  setTimeout(fireCelebration, 300);
+}
+
+function closeCelebration() {
+  const cel = document.getElementById('celebration');
+  cel.classList.remove('visible', 'reward');
+}
+
+function fireCelebration() {
+  const effects = [
+    CelebCanvas.launchStars,
+    CelebCanvas.launchFireworks,
+    CelebCanvas.launchWaterDrops,
+    CelebCanvas.launchLightning,
+    CelebCanvas.launchEmojis
+  ];
+  effects[Math.floor(Math.random() * effects.length)]();
+}
+
+// ── SLIDER ───────────────────────────────────────────
+function setupSlider() {
+  const track = document.getElementById('sliderTrack');
+  const thumb = document.getElementById('sliderThumb');
+  const fill  = document.getElementById('sliderFill');
+  let dragging = false, trackRect;
+
+  const getPct = y => Math.max(0, Math.min(1, 1 - (y - trackRect.top) / trackRect.height));
+  const start  = y => { dragging = true; trackRect = track.getBoundingClientRect(); thumb.classList.add('dragging'); fill.classList.add('dragging'); };
+  const move   = y => {
+    if (!dragging) return;
+    const pct = getPct(y);
+    const cur = currentLevelOz / bottleSizeOz;
+    if (pct >= cur) return;
+    const consumed = (cur - pct) * bottleSizeOz;
+    totalOzToday  += consumed; lifetimeOz += consumed;
+    currentLevelOz = pct * bottleSizeOz;
+    saveTotals(); renderAll();
+    checkMilestones();
+  };
+  const end = () => { if (!dragging) return; dragging = false; thumb.classList.remove('dragging'); fill.classList.remove('dragging'); };
+
+  thumb.addEventListener('touchstart', e => { e.preventDefault(); start(e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove',  e => { if (dragging) { e.preventDefault(); move(e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend',   () => end());
+  thumb.addEventListener('mousedown', e => { e.preventDefault(); start(e.clientY); });
+  document.addEventListener('mousemove',  e => { if (dragging) move(e.clientY); });
+  document.addEventListener('mouseup',    () => end());
+  track.addEventListener('touchstart', e => { e.preventDefault(); start(e.touches[0].clientY); move(e.touches[0].clientY); }, {passive:false});
+  track.addEventListener('mousedown',  e => { e.preventDefault(); start(e.clientY); move(e.clientY); });
+}
+
+// ── TOAST ────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+function addRipple(btn) {
+  const r = document.createElement('div'); r.className = 'ripple-el';
+  r.style.left = '50%'; r.style.top = '50%'; btn.appendChild(r);
+  setTimeout(() => r.remove(), 600);
+}
+function showSipFlash(text, btn) {
+  const f = document.createElement('div'); f.className = 'sip-flash';
+  f.textContent = text; btn.appendChild(f);
+  setTimeout(() => f.remove(), 1200);
+}
+
+init();
+</script>
+</body>
+</html>
